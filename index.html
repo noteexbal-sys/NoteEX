@@ -255,6 +255,58 @@
       </section>
 
       <section>
+        <div class="sec-head"><h2>Κοινή χρήση επιχείρησης</h2></div>
+        <div class="panel">
+          <p class="sub" style="font-size:13px;color:var(--muted);margin-bottom:14px">
+            Μοιράσου <strong>μόνο</strong> τα δεδομένα της επιχείρησης με συνεργάτες. Τα προσωπικά σου παραμένουν ιδιωτικά.
+          </p>
+
+          <div id="orgArea">
+            <div class="field" id="orgPickerWrap" style="display:none">
+              <label>Ενεργός χώρος εργασίας</label>
+              <select id="orgPicker"></select>
+              <div id="orgMeta" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
+            </div>
+
+            <!-- Create workspace -->
+            <div class="field">
+              <label>Δημιουργία χώρου εργασίας</label>
+              <div class="add-inline">
+                <input id="newOrgName" placeholder="π.χ. Κουρείο ο Νίκος">
+                <button id="btnCreateOrg">Δημιουργία</button>
+              </div>
+            </div>
+
+            <!-- Invite -->
+            <div class="field" id="inviteWrap" style="display:none">
+              <label>Πρόσκληση συνεργάτη</label>
+              <button class="btn" id="btnCreateInvite" style="margin-top:0">Δημιουργία κωδικού πρόσκλησης</button>
+              <div id="inviteResult" style="display:none;margin-top:10px;text-align:center">
+                <div style="font-family:'Fraunces',serif;font-size:26px;letter-spacing:.12em" id="inviteCode">—</div>
+                <div style="font-size:12px;color:var(--muted);margin:4px 0 8px">Ισχύει για 14 ημέρες</div>
+                <button class="btn ghost" id="btnCopyInvite">Αντιγραφή κωδικού</button>
+              </div>
+            </div>
+
+            <!-- Members -->
+            <div class="field" id="membersWrap" style="display:none">
+              <label>Μέλη</label>
+              <div id="memberChips"></div>
+            </div>
+
+            <!-- Join with a code -->
+            <div class="field">
+              <label>Σύνδεση με κωδικό πρόσκλησης</label>
+              <div class="add-inline">
+                <input id="joinCode" placeholder="Κωδικός…" style="text-transform:uppercase">
+                <button id="btnJoinOrg">Σύνδεση</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
         <div class="sec-head"><h2>Οι κατηγορίες μου</h2></div>
         <div class="panel">
           <div class="seg" style="margin-bottom:10px">
@@ -373,7 +425,9 @@ let state = {
   payments: [],
   transactions: [],
   txKind: 'expense',
-  txScope: 'business'
+  txScope: 'business',
+  orgs: [],
+  activeOrgId: null
 };
 const CUR = {EUR:'€',USD:'$',GBP:'£'};
 const fmt = n => (CUR[state.profile?.currency]||'€') + Number(n||0).toLocaleString('el-GR',{minimumFractionDigits:0,maximumFractionDigits:2});
@@ -406,6 +460,7 @@ $('btnLogout').onclick = async ()=>{ await sb.auth.signOut(); location.reload();
 /* ====================== DATA LOADING ====================== */
 async function bootstrap(){
   await loadProfile();
+  await loadOrgs();
   await loadCategories();
   await loadPayments();
   // first-time seed
@@ -416,6 +471,16 @@ async function bootstrap(){
   await loadTransactions();
   $('hello').textContent = 'Καλώς ήρθες' + (state.profile?.business_name ? ', '+state.profile.business_name : '');
   renderAll();
+  renderOrgs();
+}
+
+async function loadOrgs(){
+  const {data} = await sb.rpc('my_organizations');
+  state.orgs = data || [];
+  // pick a sensible active org if none chosen yet
+  if(!state.activeOrgId && state.orgs.length) state.activeOrgId = state.orgs[0].id;
+  if(state.activeOrgId && !state.orgs.find(o=>o.id===state.activeOrgId))
+    state.activeOrgId = state.orgs[0]?.id || null;
 }
 
 async function loadProfile(){
@@ -626,7 +691,10 @@ $('btnSaveTx').onclick = async ()=>{
     currency:state.profile.currency||'EUR',
     category_id:$('txCategory').value||null,
     payment_method_id:$('txPayment').value||null,
-    occurred_on:$('txDate').value, note:$('txNote').value||null
+    occurred_on:$('txDate').value, note:$('txNote').value||null,
+    // business rows are stamped with the active org so co-members can see them;
+    // personal rows stay org_id null (private).
+    org_id: state.txScope==='business' ? (state.activeOrgId || null) : null
   };
   const id=$('txId').value;
   const {error} = id
@@ -667,6 +735,7 @@ $('btnAddCat').onclick = async ()=>{
   const palette=['#16745a','#c0492f','#c79a3a','#0891b2','#9333ea','#db2777','#65a30d'];
   const {error}=await sb.from('categories').insert({
     user_id:user.id,name,kind:state.catKind,scope:state.catScope,
+    org_id: state.catScope==='business' ? (state.activeOrgId || null) : null,
     color:palette[state.categories.length%palette.length]
   });
   if(error){ toast('Υπάρχει ήδη'); return; }
@@ -681,6 +750,76 @@ $('btnAddPm').onclick = async ()=>{
   $('newPmName').value=''; await loadPayments(); renderSettings(); toast('Προστέθηκε');
 };
 async function deletePayment(id){ await sb.from('payment_methods').delete().eq('id',id); await loadPayments(); renderSettings(); }
+
+/* ====================== SHARING / ORGS ====================== */
+async function renderOrgs(){
+  const hasOrgs = state.orgs.length > 0;
+  $('orgPickerWrap').style.display = hasOrgs ? 'block' : 'none';
+  $('inviteWrap').style.display    = hasOrgs ? 'block' : 'none';
+  $('membersWrap').style.display   = hasOrgs ? 'block' : 'none';
+  if(!hasOrgs) return;
+
+  const sel = $('orgPicker');
+  sel.innerHTML = state.orgs.map(o=>`<option value="${o.id}">${o.name}</option>`).join('');
+  sel.value = state.activeOrgId;
+  const active = state.orgs.find(o=>o.id===state.activeOrgId);
+  $('orgMeta').textContent = active
+    ? `${active.member_count} μέλη · ο ρόλος σου: ${roleEl(active.role)}`
+    : '';
+
+  // members list
+  const {data:members} = await sb.from('organization_members')
+    .select('user_id, role').eq('org_id', state.activeOrgId);
+  $('memberChips').innerHTML = (members||[]).map(m=>
+    `<span class="chip">${roleEl(m.role)}</span>`
+  ).join('') || '<span style="color:var(--muted);font-size:13px">—</span>';
+}
+function roleEl(r){ return r==='owner'?'Ιδιοκτήτης': r==='admin'?'Διαχειριστής':'Μέλος'; }
+
+$('orgPicker').onchange = async (e)=>{
+  state.activeOrgId = e.target.value;
+  await renderOrgs();
+  toast('Ενεργός χώρος: ' + (state.orgs.find(o=>o.id===state.activeOrgId)?.name||''));
+};
+
+$('btnCreateOrg').onclick = async ()=>{
+  const name = $('newOrgName').value.trim();
+  const {data, error} = await sb.rpc('create_organization', {p_name: name});
+  if(error){ toast('Σφάλμα δημιουργίας'); return; }
+  $('newOrgName').value='';
+  state.activeOrgId = data;
+  await loadOrgs();
+  // offer to move existing business history into the new workspace
+  await sb.rpc('attach_business_to_org', {p_org: data});
+  await loadCategories(); await loadTransactions();
+  await renderOrgs(); renderAll();
+  toast('Ο χώρος εργασίας δημιουργήθηκε');
+};
+
+$('btnCreateInvite').onclick = async ()=>{
+  if(!state.activeOrgId){ toast('Διάλεξε χώρο εργασίας'); return; }
+  const {data, error} = await sb.rpc('create_invite', {p_org: state.activeOrgId});
+  if(error){ toast('Δεν επιτρέπεται'); return; }
+  $('inviteCode').textContent = data;
+  $('inviteResult').style.display='block';
+};
+$('btnCopyInvite').onclick = async ()=>{
+  const code = $('inviteCode').textContent;
+  try{ await navigator.clipboard.writeText(code); toast('Αντιγράφηκε'); }
+  catch{ toast(code); }
+};
+
+$('btnJoinOrg').onclick = async ()=>{
+  const code = $('joinCode').value.trim();
+  if(!code){ return; }
+  const {data, error} = await sb.rpc('accept_invite', {p_code: code});
+  if(error){ toast(error.message || 'Άκυρος κωδικός'); return; }
+  $('joinCode').value='';
+  state.activeOrgId = data;
+  await loadOrgs(); await loadCategories(); await loadTransactions();
+  await renderOrgs(); renderAll();
+  toast('Συνδέθηκες στον χώρο εργασίας');
+};
 
 /* ====================== NAVIGATION ====================== */
 document.querySelectorAll('nav.tabbar button').forEach(b=> b.onclick=()=>{
