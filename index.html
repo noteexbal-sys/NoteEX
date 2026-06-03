@@ -131,6 +131,11 @@
   .add-inline{display:flex;gap:8px;margin-top:10px}
   .add-inline input{flex:1}
   .add-inline button{padding:0 16px;border-radius:12px;border:0;background:var(--green);color:#fff;font-weight:700;cursor:pointer}
+  .mrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .mrow:last-child{border-bottom:0}
+  .mrow .who{flex:1;font-weight:600;font-size:14px}
+  .mrow .role{font-size:12px;color:var(--muted);font-weight:600}
+  .mrow .rm{border:0;background:transparent;color:var(--red);font-weight:800;cursor:pointer;font-size:15px;padding:4px 8px}
 
   /* ---- Auth ---- */
   #authScreen{position:fixed;inset:0;background:radial-gradient(120% 120% at 50% 0%, #16745a, #0b3d2e);display:flex;align-items:center;justify-content:center;z-index:80;padding:24px}
@@ -291,7 +296,8 @@
             <!-- Members -->
             <div class="field" id="membersWrap" style="display:none">
               <label>Μέλη</label>
-              <div id="memberChips"></div>
+              <div id="memberList"></div>
+              <button class="btn ghost" id="btnLeaveOrg" style="color:var(--red);margin-top:8px">Αποχώρηση από τον χώρο</button>
             </div>
 
             <!-- Join with a code -->
@@ -440,7 +446,7 @@ function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show')
 /* ====================== AUTH ====================== */
 async function refreshSession(){
   const {data:{session}} = await sb.auth.getSession();
-  if(session){ showApp(); await bootstrap(); }
+  if(session){ state.userId = session.user.id; showApp(); await bootstrap(); }
   else { $('authScreen').classList.remove('hidden'); $('app').classList.add('hidden'); }
 }
 function showApp(){ $('authScreen').classList.add('hidden'); $('app').classList.remove('hidden'); }
@@ -770,11 +776,47 @@ async function renderOrgs(){
   // members list
   const {data:members} = await sb.from('organization_members')
     .select('user_id, role').eq('org_id', state.activeOrgId);
-  $('memberChips').innerHTML = (members||[]).map(m=>
-    `<span class="chip">${roleEl(m.role)}</span>`
-  ).join('') || '<span style="color:var(--muted);font-size:13px">—</span>';
+  const iAmAdmin = active && (active.role==='owner' || active.role==='admin');
+  const iAmOwner = active && active.role==='owner';
+  $('memberList').innerHTML = (members||[]).map(m=>{
+    const isMe = m.user_id===state.userId;
+    const isOwner = m.role==='owner';
+    const who = isMe ? 'Εσύ' : ('Μέλος · ' + m.user_id.slice(0,8));
+    // admins can remove others who are not the owner; never a remove on self here
+    const canRemove = iAmAdmin && !isOwner && !isMe;
+    const rm = canRemove ? `<button class="rm" data-remove="${m.user_id}" title="Αφαίρεση">✕</button>` : '';
+    return `<div class="mrow"><span class="who">${who}</span><span class="role">${roleEl(m.role)}</span>${rm}</div>`;
+  }).join('') || '<span style="color:var(--muted);font-size:13px">—</span>';
+  $('memberList').querySelectorAll('[data-remove]').forEach(b=>
+    b.onclick=()=>removeMember(b.dataset.remove));
+  // owner can't leave (would orphan the workspace); hide the leave button for them
+  $('btnLeaveOrg').style.display = iAmOwner ? 'none' : 'block';
 }
 function roleEl(r){ return r==='owner'?'Ιδιοκτήτης': r==='admin'?'Διαχειριστής':'Μέλος'; }
+
+async function removeMember(uid){
+  if(!confirm('Αφαίρεση αυτού του μέλους από τον χώρο εργασίας;')) return;
+  const {error} = await sb.from('organization_members')
+    .delete().eq('org_id', state.activeOrgId).eq('user_id', uid);
+  if(error){ toast('Δεν επιτρέπεται'); return; }
+  await loadOrgs(); await renderOrgs();
+  toast('Το μέλος αφαιρέθηκε');
+}
+
+async function leaveOrg(){
+  const active = state.orgs.find(o=>o.id===state.activeOrgId);
+  if(!active) return;
+  if(active.role==='owner'){ toast('Ο ιδιοκτήτης δεν μπορεί να αποχωρήσει'); return; }
+  if(!confirm('Αποχώρηση από «'+active.name+'»; Δεν θα βλέπεις πλέον τα δεδομένα της επιχείρησης.')) return;
+  const {error} = await sb.from('organization_members')
+    .delete().eq('org_id', state.activeOrgId).eq('user_id', state.userId);
+  if(error){ toast('Σφάλμα'); return; }
+  state.activeOrgId = null;
+  await loadOrgs(); await loadCategories(); await loadTransactions();
+  await renderOrgs(); renderAll();
+  toast('Αποχώρησες από τον χώρο');
+}
+$('btnLeaveOrg').onclick = leaveOrg;
 
 $('orgPicker').onchange = async (e)=>{
   state.activeOrgId = e.target.value;
@@ -797,9 +839,12 @@ $('btnCreateOrg').onclick = async ()=>{
 };
 
 $('btnCreateInvite').onclick = async ()=>{
-  if(!state.activeOrgId){ toast('Διάλεξε χώρο εργασίας'); return; }
-  const {data, error} = await sb.rpc('create_invite', {p_org: state.activeOrgId});
-  if(error){ toast('Δεν επιτρέπεται'); return; }
+  // read the id straight from the dropdown so it can't drift from state
+  const orgId = $('orgPicker').value || state.activeOrgId;
+  if(!orgId){ toast('Διάλεξε χώρο εργασίας'); return; }
+  state.activeOrgId = orgId;
+  const {data, error} = await sb.rpc('create_invite', {p_org: orgId});
+  if(error){ toast(error.message || 'Δεν επιτρέπεται'); console.error('create_invite', error); return; }
   $('inviteCode').textContent = data;
   $('inviteResult').style.display='block';
 };
