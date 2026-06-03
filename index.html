@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0b3d2e">
 <title>Ταμείο — Έσοδα & Έξοδα</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ταμείο">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -278,6 +285,7 @@
       </section>
 
       <section>
+        <button class="btn" id="btnInstall" style="display:none">Εγκατάσταση εφαρμογής</button>
         <button class="btn ghost" id="btnLogout">Αποσύνδεση</button>
       </section>
     </div>
@@ -698,6 +706,33 @@ $('reportTabs').querySelectorAll('button').forEach(b=> b.onclick=()=>{
 /* ====================== START ====================== */
 sb.auth.onAuthStateChange((_e,session)=>{ if(!session){ $('authScreen').classList.remove('hidden'); $('app').classList.add('hidden'); }});
 refreshSession();
+
+/* ====================== PWA ====================== */
+// Register the service worker (only works over https:// or localhost)
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(err=> console.warn('SW registration failed:', err));
+  });
+}
+
+// Custom "Add to home screen" prompt (Android/Chrome)
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e=>{
+  e.preventDefault();
+  deferredPrompt = e;
+  const btn = $('btnInstall');
+  if(btn) btn.style.display='block';
+});
+document.addEventListener('click', async e=>{
+  if(e.target && e.target.id==='btnInstall' && deferredPrompt){
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    e.target.style.display='none';
+  }
+});
+window.addEventListener('appinstalled', ()=>{ const b=$('btnInstall'); if(b) b.style.display='none'; });
+
 </script>
 </body>
 </html>
