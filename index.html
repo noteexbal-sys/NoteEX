@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b3d2e">
+<title>Ταμείο — Έσοδα & Έξοδα</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f4f1ea; --panel:#fffdf8; --ink:#16271f; --muted:#6b7d72;
+    --green:#0b3d2e; --green-2:#16745a; --gold:#c79a3a; --red:#c0492f;
+    --line:#e3ddcf; --shadow:0 1px 2px rgba(20,39,31,.06),0 8px 24px rgba(20,39,31,.06);
+    --radius:18px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Manrope',sans-serif; background:var(--bg); color:var(--ink);
+    -webkit-font-smoothing:antialiased; line-height:1.45;
+    padding-bottom:88px;
+  }
+  h1,h2,h3,.display{font-family:'Fraunces',serif; letter-spacing:-.01em}
+  .wrap{max-width:760px;margin:0 auto;padding:0 16px}
+
+  /* ---- Header ---- */
+  header.app{
+    background:radial-gradient(120% 140% at 0% 0%, #16745a 0%, #0b3d2e 55%);
+    color:#f4f1ea; padding:26px 0 56px; border-radius:0 0 28px 28px;
+    position:relative; overflow:hidden;
+  }
+  header.app::after{
+    content:""; position:absolute; right:-60px; top:-60px; width:220px; height:220px;
+    background:radial-gradient(circle, rgba(199,154,58,.35), transparent 70%);
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px;opacity:.92}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--gold)}
+  .hello{font-size:13px;opacity:.8;margin-top:18px}
+  .balance{font-family:'Fraunces',serif;font-size:40px;font-weight:600;margin-top:2px}
+  .balance small{font-size:18px;opacity:.7;font-weight:500}
+  .scope-toggle{display:inline-flex;background:rgba(255,255,255,.12);border-radius:999px;padding:3px;margin-top:16px;gap:2px}
+  .scope-toggle button{
+    border:0;background:transparent;color:#f4f1ea;font-family:inherit;font-weight:600;
+    font-size:13px;padding:7px 16px;border-radius:999px;cursor:pointer;opacity:.7;transition:.15s
+  }
+  .scope-toggle button.active{background:#fffdf8;color:var(--green);opacity:1}
+
+  /* ---- Cards ---- */
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:-34px}
+  .card{background:var(--panel);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);border:1px solid var(--line)}
+  .card .lbl{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .card .val{font-family:'Fraunces',serif;font-size:26px;font-weight:600;margin-top:6px}
+  .val.pos{color:var(--green-2)} .val.neg{color:var(--red)}
+
+  section{margin-top:26px}
+  .sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .sec-head h2{font-size:19px;font-weight:600}
+  .period-tabs{display:inline-flex;gap:4px;background:#eae5d9;border-radius:999px;padding:3px}
+  .period-tabs button{border:0;background:transparent;font-family:inherit;font-weight:600;font-size:12px;padding:6px 12px;border-radius:999px;cursor:pointer;color:var(--muted)}
+  .period-tabs button.active{background:var(--panel);color:var(--ink);box-shadow:var(--shadow)}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
+  .chart-box{height:230px;position:relative}
+
+  /* ---- Category breakdown ---- */
+  .cat-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .cat-row:last-child{border-bottom:0}
+  .cat-swatch{width:12px;height:12px;border-radius:4px;flex:0 0 auto}
+  .cat-name{font-weight:600;font-size:14px;flex:1}
+  .cat-amount{font-weight:700;font-size:14px}
+  .cat-bar{height:6px;border-radius:999px;background:#eae5d9;margin-top:5px;overflow:hidden}
+  .cat-bar > i{display:block;height:100%;border-radius:999px}
+
+  /* ---- Transaction list ---- */
+  .tx{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px}
+  .tx .ic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-weight:800;color:#fff;flex:0 0 auto}
+  .tx .meta{flex:1;min-width:0}
+  .tx .t-cat{font-weight:600;font-size:14px}
+  .tx .t-sub{font-size:12px;color:var(--muted)}
+  .tx .t-amt{font-weight:800;font-size:15px;white-space:nowrap}
+  .tx .t-amt.income{color:var(--green-2)} .tx .t-amt.expense{color:var(--red)}
+  .empty{text-align:center;color:var(--muted);padding:32px 12px;font-size:14px}
+
+  /* ---- Bottom nav ---- */
+  nav.tabbar{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);
+    display:flex;justify-content:space-around;padding:8px 6px calc(8px + env(safe-area-inset-bottom));z-index:40}
+  nav.tabbar button{border:0;background:transparent;font-family:inherit;color:var(--muted);font-size:11px;font-weight:600;
+    display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:4px 10px;border-radius:12px}
+  nav.tabbar button.active{color:var(--green)}
+  nav.tabbar .glyph{font-size:20px;line-height:1}
+
+  /* ---- FAB ---- */
+  .fab{position:fixed;right:18px;bottom:84px;width:58px;height:58px;border-radius:50%;border:0;
+    background:var(--gold);color:#3a2c08;font-size:30px;font-weight:300;box-shadow:0 8px 22px rgba(199,154,58,.5);
+    cursor:pointer;z-index:45;display:grid;place-items:center}
+
+  /* ---- Modal / Sheet ---- */
+  .overlay{position:fixed;inset:0;background:rgba(20,39,31,.45);display:none;align-items:flex-end;justify-content:center;z-index:60}
+  .overlay.open{display:flex}
+  .sheet{background:var(--panel);width:100%;max-width:760px;border-radius:24px 24px 0 0;padding:22px 18px calc(22px + env(safe-area-inset-bottom));max-height:92vh;overflow:auto}
+  .sheet h3{font-size:20px;margin-bottom:4px}
+  .sheet .sub{font-size:13px;color:var(--muted);margin-bottom:18px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em}
+  .field input,.field select,.field textarea{
+    width:100%;font-family:inherit;font-size:15px;padding:12px 14px;border:1px solid var(--line);
+    border-radius:12px;background:#fffefb;color:var(--ink)}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--green-2);border-color:transparent}
+  .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .seg button{padding:12px;border:1px solid var(--line);border-radius:12px;background:#fffefb;font-family:inherit;font-weight:700;cursor:pointer;font-size:14px;color:var(--muted)}
+  .seg button.on-income{background:var(--green-2);color:#fff;border-color:transparent}
+  .seg button.on-expense{background:var(--red);color:#fff;border-color:transparent}
+  .seg button.on-scope{background:var(--green);color:#fff;border-color:transparent}
+  .btn{width:100%;padding:15px;border:0;border-radius:14px;background:var(--green);color:#f4f1ea;font-family:inherit;font-weight:700;font-size:15px;cursor:pointer;margin-top:6px}
+  .btn.ghost{background:transparent;color:var(--muted);font-weight:600}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+  /* ---- Settings ---- */
+  .chip{display:inline-flex;align-items:center;gap:8px;background:#fffefb;border:1px solid var(--line);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;margin:0 6px 8px 0}
+  .chip .x{cursor:pointer;color:var(--muted);font-weight:800}
+  .add-inline{display:flex;gap:8px;margin-top:10px}
+  .add-inline input{flex:1}
+  .add-inline button{padding:0 16px;border-radius:12px;border:0;background:var(--green);color:#fff;font-weight:700;cursor:pointer}
+
+  /* ---- Auth ---- */
+  #authScreen{position:fixed;inset:0;background:radial-gradient(120% 120% at 50% 0%, #16745a, #0b3d2e);display:flex;align-items:center;justify-content:center;z-index:80;padding:24px}
+  #authScreen .box{background:var(--panel);border-radius:24px;padding:30px 24px;width:100%;max-width:380px;box-shadow:var(--shadow)}
+  #authScreen h1{font-size:28px;text-align:center}
+  #authScreen p.tag{text-align:center;color:var(--muted);font-size:13px;margin:4px 0 22px}
+  .hidden{display:none!important}
+  .toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 18px;border-radius:999px;font-size:13px;font-weight:600;z-index:90;opacity:0;transition:.25s;pointer-events:none}
+  .toast.show{opacity:1}
+  .view{display:none} .view.active{display:block}
+</style>
+</head>
+<body>
+
+<!-- ============ AUTH ============ -->
+<div id="authScreen">
+  <div class="box">
+    <h1>Ταμείο</h1>
+    <p class="tag">Έσοδα, έξοδα και καθαρή εικόνα — όλα σε ένα.</p>
+    <div class="field">
+      <label>Email</label>
+      <input id="authEmail" type="email" placeholder="onoma@paradeigma.gr" autocomplete="email">
+    </div>
+    <div class="field">
+      <label>Κωδικός</label>
+      <input id="authPass" type="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn" id="btnLogin">Σύνδεση</button>
+    <button class="btn ghost" id="btnSignup">Δημιουργία λογαριασμού</button>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" class="hidden">
+  <header class="app">
+    <div class="wrap">
+      <div class="brand"><span class="dot"></span> ΤΑΜΕΙΟ</div>
+      <div class="hello" id="hello">Καλώς ήρθες</div>
+      <div class="balance">Καθαρό υπόλοιπο: <span id="netBalance">€0</span></div>
+      <div class="scope-toggle">
+        <button data-scope="business" class="active">Επιχείρηση</button>
+        <button data-scope="personal">Προσωπικά</button>
+        <button data-scope="all">Όλα</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <!-- ===== HOME VIEW ===== -->
+    <div class="view active" id="view-home">
+      <div class="cards">
+        <div class="card"><div class="lbl">Έσοδα</div><div class="val pos" id="cardIncome">€0</div></div>
+        <div class="card"><div class="lbl">Έξοδα</div><div class="val neg" id="cardExpense">€0</div></div>
+      </div>
+
+      <section>
+        <div class="sec-head">
+          <h2>Επισκόπηση</h2>
+          <div class="period-tabs" id="periodTabs">
+            <button data-period="week">Εβδομάδα</button>
+            <button data-period="month" class="active">Μήνας</button>
+            <button data-period="year">Έτος</button>
+          </div>
+        </div>
+        <div class="panel"><div class="chart-box"><canvas id="trendChart"></canvas></div></div>
+      </section>
+
+      <section>
+        <div class="sec-head"><h2>Ανά κατηγορία</h2></div>
+        <div class="panel" id="catBreakdown"><div class="empty">Δεν υπάρχουν δεδομένα ακόμη.</div></div>
+      </section>
+    </div>
+
+    <!-- ===== TRANSACTIONS VIEW ===== -->
+    <div class="view" id="view-tx">
+      <section>
+        <div class="sec-head"><h2>Κινήσεις</h2></div>
+        <div id="txList"><div class="empty">Δεν υπάρχουν κινήσεις. Πάτησε «+» για να προσθέσεις.</div></div>
+      </section>
+    </div>
+
+    <!-- ===== REPORTS VIEW ===== -->
+    <div class="view" id="view-reports">
+      <section>
+        <div class="sec-head">
+          <h2>Αναφορές</h2>
+          <div class="period-tabs" id="reportTabs">
+            <button data-period="week">Εβδομάδα</button>
+            <button data-period="month" class="active">Μήνας</button>
+            <button data-period="year">Έτος</button>
+          </div>
+        </div>
+        <div class="cards" style="margin-top:0">
+          <div class="card"><div class="lbl">Σύνολο εσόδων</div><div class="val pos" id="rIncome">€0</div></div>
+          <div class="card"><div class="lbl">Σύνολο εξόδων</div><div class="val neg" id="rExpense">€0</div></div>
+          <div class="card"><div class="lbl">Καθαρό αποτέλεσμα</div><div class="val" id="rNet">€0</div></div>
+          <div class="card"><div class="lbl">Πλήθος κινήσεων</div><div class="val" id="rCount">0</div></div>
+        </div>
+        <div class="panel" style="margin-top:12px"><div class="chart-box"><canvas id="reportChart"></canvas></div></div>
+      </section>
+    </div>
+
+    <!-- ===== SETTINGS VIEW ===== -->
+    <div class="view" id="view-settings">
+      <section>
+        <div class="sec-head"><h2>Ρυθμίσεις</h2></div>
+        <div class="panel">
+          <div class="field">
+            <label>Όνομα επιχείρησης</label>
+            <input id="setBusiness" placeholder="π.χ. Κουρείο ο Νίκος">
+          </div>
+          <div class="field">
+            <label>Νόμισμα</label>
+            <select id="setCurrency">
+              <option value="EUR">€ Ευρώ (EUR)</option>
+              <option value="USD">$ Δολάριο (USD)</option>
+              <option value="GBP">£ Λίρα (GBP)</option>
+            </select>
+          </div>
+          <button class="btn" id="btnSaveProfile">Αποθήκευση</button>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-head"><h2>Οι κατηγορίες μου</h2></div>
+        <div class="panel">
+          <div class="seg" style="margin-bottom:10px">
+            <button id="catScopeBusiness" class="on-scope">Επιχείρηση</button>
+            <button id="catScopePersonal">Προσωπικά</button>
+          </div>
+          <div class="seg" style="margin-bottom:14px">
+            <button id="catKindIncome" class="on-income">Έσοδα</button>
+            <button id="catKindExpense">Έξοδα</button>
+          </div>
+          <div id="catChips"></div>
+          <div class="add-inline">
+            <input id="newCatName" placeholder="Νέα κατηγορία…">
+            <button id="btnAddCat">Προσθήκη</button>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-head"><h2>Τρόποι πληρωμής</h2></div>
+        <div class="panel">
+          <div id="pmChips"></div>
+          <div class="add-inline">
+            <input id="newPmName" placeholder="π.χ. Μετρητά…">
+            <button id="btnAddPm">Προσθήκη</button>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <button class="btn ghost" id="btnLogout">Αποσύνδεση</button>
+      </section>
+    </div>
+  </div>
+
+  <!-- FAB -->
+  <button class="fab" id="fab" aria-label="Νέα κίνηση">+</button>
+
+  <!-- Bottom nav -->
+  <nav class="tabbar">
+    <button data-view="home" class="active"><span class="glyph">◧</span>Αρχική</button>
+    <button data-view="tx"><span class="glyph">≣</span>Κινήσεις</button>
+    <button data-view="reports"><span class="glyph">📊</span>Αναφορές</button>
+    <button data-view="settings"><span class="glyph">⚙</span>Ρυθμίσεις</button>
+  </nav>
+</div>
+
+<!-- ============ ADD/EDIT SHEET ============ -->
+<div class="overlay" id="txOverlay">
+  <div class="sheet">
+    <h3 id="sheetTitle">Νέα κίνηση</h3>
+    <p class="sub">Καταχώρισε ένα έσοδο ή έξοδο.</p>
+    <input type="hidden" id="txId">
+    <div class="field">
+      <div class="seg">
+        <button id="kindIncome" class="on-income">Έσοδο</button>
+        <button id="kindExpense">Έξοδο</button>
+      </div>
+    </div>
+    <div class="field" id="scopeField">
+      <label>Τύπος</label>
+      <div class="seg">
+        <button id="scopeBusiness">Επιχείρηση</button>
+        <button id="scopePersonal">Προσωπικά</button>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <label>Ποσό</label>
+        <input id="txAmount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0,00">
+      </div>
+      <div class="field">
+        <label>Ημερομηνία</label>
+        <input id="txDate" type="date">
+      </div>
+    </div>
+    <div class="field">
+      <label>Κατηγορία</label>
+      <select id="txCategory"></select>
+    </div>
+    <div class="field">
+      <label>Τρόπος πληρωμής</label>
+      <select id="txPayment"></select>
+    </div>
+    <div class="field">
+      <label>Σημείωση (προαιρετικό)</label>
+      <textarea id="txNote" rows="2" placeholder="π.χ. Κούρεμα + γένια"></textarea>
+    </div>
+    <button class="btn" id="btnSaveTx">Αποθήκευση</button>
+    <button class="btn ghost" id="btnDeleteTx" style="display:none;color:var(--red)">Διαγραφή</button>
+    <button class="btn ghost" id="btnCloseSheet">Άκυρο</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =====================================================================
+   ΡΥΘΜΙΣΗ SUPABASE
+   Συμπλήρωσε τα δικά σου στοιχεία από Project Settings → API.
+===================================================================== */
+const SUPABASE_URL = 'https://styjkeyqhahjvfhxhqjv.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN0eWprZXlxaGFoanZmaHhocWp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MzkyNjcsImV4cCI6MjA5NjAxNTI2N30.OraMqSg5sOe3wEGvqEgDFve90hOHufa9TdrZFPJDWoA';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ---------- State ---------- */
+let state = {
+  scope: 'business',
+  period: 'month',
+  reportPeriod: 'month',
+  catKind: 'income',
+  catScope: 'business',
+  profile: null,
+  categories: [],
+  payments: [],
+  transactions: [],
+  txKind: 'expense',
+  txScope: 'business'
+};
+const CUR = {EUR:'€',USD:'$',GBP:'£'};
+const fmt = n => (CUR[state.profile?.currency]||'€') + Number(n||0).toLocaleString('el-GR',{minimumFractionDigits:0,maximumFractionDigits:2});
+const $ = id => document.getElementById(id);
+let trendChart, reportChart;
+
+/* ---------- Toast ---------- */
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+
+/* ====================== AUTH ====================== */
+async function refreshSession(){
+  const {data:{session}} = await sb.auth.getSession();
+  if(session){ showApp(); await bootstrap(); }
+  else { $('authScreen').classList.remove('hidden'); $('app').classList.add('hidden'); }
+}
+function showApp(){ $('authScreen').classList.add('hidden'); $('app').classList.remove('hidden'); }
+
+$('btnLogin').onclick = async ()=>{
+  const {error} = await sb.auth.signInWithPassword({email:$('authEmail').value.trim(), password:$('authPass').value});
+  if(error){ toast('Σφάλμα σύνδεσης'); return; }
+  await refreshSession();
+};
+$('btnSignup').onclick = async ()=>{
+  const {error} = await sb.auth.signUp({email:$('authEmail').value.trim(), password:$('authPass').value});
+  if(error){ toast('Σφάλμα εγγραφής'); return; }
+  toast('Έλεγξε το email σου για επιβεβαίωση');
+};
+$('btnLogout').onclick = async ()=>{ await sb.auth.signOut(); location.reload(); };
+
+/* ====================== DATA LOADING ====================== */
+async function bootstrap(){
+  await loadProfile();
+  await loadCategories();
+  await loadPayments();
+  // first-time seed
+  if(state.categories.length === 0){
+    await sb.rpc('seed_default_categories');
+    await loadCategories(); await loadPayments();
+  }
+  await loadTransactions();
+  $('hello').textContent = 'Καλώς ήρθες' + (state.profile?.business_name ? ', '+state.profile.business_name : '');
+  renderAll();
+}
+
+async function loadProfile(){
+  const {data} = await sb.from('profiles').select('*').single();
+  state.profile = data || {currency:'EUR'};
+  $('setBusiness').value = state.profile.business_name || '';
+  $('setCurrency').value = state.profile.currency || 'EUR';
+}
+async function loadCategories(){
+  const {data} = await sb.from('categories').select('*').eq('is_archived',false).order('sort_order');
+  state.categories = data || [];
+}
+async function loadPayments(){
+  const {data} = await sb.from('payment_methods').select('*').eq('is_archived',false);
+  state.payments = data || [];
+}
+async function loadTransactions(){
+  const {data} = await sb.from('transactions').select('*').order('occurred_on',{ascending:false}).limit(500);
+  state.transactions = data || [];
+}
+
+/* ====================== HELPERS ====================== */
+function periodStart(period, ref=new Date()){
+  const d = new Date(ref); d.setHours(0,0,0,0);
+  if(period==='week'){ const wd=(d.getDay()+6)%7; d.setDate(d.getDate()-wd); }
+  else if(period==='month'){ d.setDate(1); }
+  else if(period==='year'){ d.setMonth(0,1); }
+  return d;
+}
+function inScope(t){ return state.scope === 'all' || t.scope === state.scope; }
+function scoped(){ return state.transactions.filter(inScope); }
+
+/* ====================== RENDER ====================== */
+function renderAll(){ renderHome(); renderTx(); renderReports(); renderSettings(); }
+
+function renderHome(){
+  const start = periodStart(state.period);
+  const rows = scoped().filter(t=> new Date(t.occurred_on) >= start);
+  const inc = rows.filter(t=>t.kind==='income').reduce((s,t)=>s+ +t.amount,0);
+  const exp = rows.filter(t=>t.kind==='expense').reduce((s,t)=>s+ +t.amount,0);
+  $('cardIncome').textContent = fmt(inc);
+  $('cardExpense').textContent = fmt(exp);
+  // net balance = all-time within scope
+  const all = scoped();
+  const net = all.filter(t=>t.kind==='income').reduce((s,t)=>s+ +t.amount,0)
+            - all.filter(t=>t.kind==='expense').reduce((s,t)=>s+ +t.amount,0);
+  $('netBalance').textContent = fmt(net);
+  renderTrend(rows);
+  renderCategories(rows);
+}
+
+function renderTrend(rows){
+  // group expenses vs income over time buckets within the period
+  const buckets = {};
+  rows.forEach(t=>{
+    const key = t.occurred_on;
+    buckets[key] = buckets[key] || {income:0,expense:0};
+    buckets[key][t.kind] += +t.amount;
+  });
+  const labels = Object.keys(buckets).sort();
+  const incData = labels.map(k=>buckets[k].income);
+  const expData = labels.map(k=>buckets[k].expense);
+  const disp = labels.map(k=> new Date(k).toLocaleDateString('el-GR',{day:'2-digit',month:'short'}));
+  if(trendChart) trendChart.destroy();
+  trendChart = new Chart($('trendChart'),{
+    type:'line',
+    data:{labels:disp,datasets:[
+      {label:'Έσοδα',data:incData,borderColor:'#16745a',backgroundColor:'rgba(22,116,90,.12)',tension:.35,fill:true,borderWidth:2,pointRadius:2},
+      {label:'Έξοδα',data:expData,borderColor:'#c0492f',backgroundColor:'rgba(192,73,47,.10)',tension:.35,fill:true,borderWidth:2,pointRadius:2}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{font:{family:'Manrope',weight:'600'},color:'#6b7d72'}}},
+      scales:{y:{ticks:{color:'#6b7d72'},grid:{color:'#eae5d9'}},x:{ticks:{color:'#6b7d72'},grid:{display:false}}}}
+  });
+}
+
+function renderCategories(rows){
+  const exp = rows.filter(t=>t.kind==='expense');
+  const total = exp.reduce((s,t)=>s+ +t.amount,0);
+  const byCat = {};
+  exp.forEach(t=>{
+    const c = state.categories.find(c=>c.id===t.category_id);
+    const name = c?.name || 'Χωρίς κατηγορία';
+    const color = c?.color || '#9ca3af';
+    byCat[name] = byCat[name] || {amount:0,color};
+    byCat[name].amount += +t.amount;
+  });
+  const entries = Object.entries(byCat).sort((a,b)=>b[1].amount-a[1].amount);
+  const box = $('catBreakdown');
+  if(!entries.length){ box.innerHTML='<div class="empty">Δεν υπάρχουν έξοδα για αυτή την περίοδο.</div>'; return; }
+  box.innerHTML = entries.map(([name,v])=>{
+    const pct = total? Math.round(v.amount/total*100):0;
+    return `<div class="cat-row" style="flex-wrap:wrap">
+      <span class="cat-swatch" style="background:${v.color}"></span>
+      <span class="cat-name">${name}</span>
+      <span class="cat-amount">${fmt(v.amount)} <small style="color:var(--muted)">${pct}%</small></span>
+      <div class="cat-bar" style="flex-basis:100%"><i style="width:${pct}%;background:${v.color}"></i></div>
+    </div>`;
+  }).join('');
+}
+
+function renderTx(){
+  const rows = scoped();
+  const list = $('txList');
+  if(!rows.length){ list.innerHTML='<div class="empty">Δεν υπάρχουν κινήσεις. Πάτησε «+» για να προσθέσεις.</div>'; return; }
+  list.innerHTML = rows.map(t=>{
+    const c = state.categories.find(c=>c.id===t.category_id);
+    const pm = state.payments.find(p=>p.id===t.payment_method_id);
+    const color = c?.color || '#9ca3af';
+    const initial = (c?.name||'?').charAt(0).toUpperCase();
+    const date = new Date(t.occurred_on).toLocaleDateString('el-GR',{day:'2-digit',month:'short',year:'numeric'});
+    const sign = t.kind==='income'?'+':'−';
+    const scopeTag = state.scope==='all' ? (t.scope==='business'?'Επιχείρηση':'Προσωπικά')+' · ' : '';
+    return `<div class="tx" data-id="${t.id}">
+      <div class="ic" style="background:${color}">${initial}</div>
+      <div class="meta">
+        <div class="t-cat">${c?.name||'Χωρίς κατηγορία'}</div>
+        <div class="t-sub">${scopeTag}${date}${pm? ' · '+pm.name:''}${t.note? ' · '+t.note:''}</div>
+      </div>
+      <div class="t-amt ${t.kind}">${sign}${fmt(t.amount)}</div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.tx').forEach(el=> el.onclick=()=>openSheet(el.dataset.id));
+}
+
+function renderReports(){
+  const start = periodStart(state.reportPeriod);
+  const rows = scoped().filter(t=> new Date(t.occurred_on) >= start);
+  const inc = rows.filter(t=>t.kind==='income').reduce((s,t)=>s+ +t.amount,0);
+  const exp = rows.filter(t=>t.kind==='expense').reduce((s,t)=>s+ +t.amount,0);
+  $('rIncome').textContent = fmt(inc);
+  $('rExpense').textContent = fmt(exp);
+  const net = inc-exp;
+  const ne=$('rNet'); ne.textContent=fmt(net); ne.className='val '+(net>=0?'pos':'neg');
+  $('rCount').textContent = rows.length;
+  if(reportChart) reportChart.destroy();
+  reportChart = new Chart($('reportChart'),{
+    type:'bar',
+    data:{labels:['Έσοδα','Έξοδα','Καθαρό'],datasets:[{
+      data:[inc,exp,net],
+      backgroundColor:['#16745a','#c0492f','#c79a3a'],borderRadius:8}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{y:{ticks:{color:'#6b7d72'},grid:{color:'#eae5d9'}},x:{ticks:{color:'#6b7d72'},grid:{display:false}}}}
+  });
+}
+
+function renderSettings(){
+  // categories chips
+  const cats = state.categories.filter(c=>c.kind===state.catKind && c.scope===state.catScope);
+  $('catChips').innerHTML = cats.map(c=>
+    `<span class="chip"><span class="cat-swatch" style="background:${c.color}"></span>${c.name}<span class="x" data-cat="${c.id}">✕</span></span>`
+  ).join('') || '<span style="color:var(--muted);font-size:13px">Καμία κατηγορία</span>';
+  $('catChips').querySelectorAll('.x').forEach(x=> x.onclick=()=>deleteCategory(x.dataset.cat));
+  // payment chips
+  $('pmChips').innerHTML = state.payments.map(p=>
+    `<span class="chip">${p.name}<span class="x" data-pm="${p.id}">✕</span></span>`
+  ).join('') || '<span style="color:var(--muted);font-size:13px">Κανένας τρόπος</span>';
+  $('pmChips').querySelectorAll('.x').forEach(x=> x.onclick=()=>deletePayment(x.dataset.pm));
+}
+
+/* ====================== SHEET (add/edit) ====================== */
+function fillSelects(){
+  const cats = state.categories.filter(c=>c.kind===state.txKind && c.scope===state.txScope);
+  $('txCategory').innerHTML = cats.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')
+    || '<option value="">— καμία —</option>';
+  $('txPayment').innerHTML = '<option value="">—</option>' +
+    state.payments.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+}
+function setTxKind(k){
+  state.txKind = k;
+  $('kindIncome').className = k==='income'?'on-income':'';
+  $('kindExpense').className = k==='expense'?'on-expense':'';
+  fillSelects();
+}
+function setTxScope(s){
+  state.txScope = s;
+  $('scopeBusiness').className = s==='business'?'on-scope':'';
+  $('scopePersonal').className = s==='personal'?'on-scope':'';
+  fillSelects();
+}
+function openSheet(id){
+  $('txOverlay').classList.add('open');
+  if(id){
+    const t = state.transactions.find(x=>x.id===id);
+    $('sheetTitle').textContent='Επεξεργασία κίνησης';
+    $('txId').value=t.id; setTxScope(t.scope); setTxKind(t.kind);
+    $('txAmount').value=t.amount; $('txDate').value=t.occurred_on;
+    $('txCategory').value=t.category_id||''; $('txPayment').value=t.payment_method_id||'';
+    $('txNote').value=t.note||''; $('btnDeleteTx').style.display='block';
+  }else{
+    $('sheetTitle').textContent='Νέα κίνηση';
+    $('txId').value='';
+    // default to current scope; in combined view default to business
+    setTxScope(state.scope==='all' ? 'business' : state.scope);
+    setTxKind('expense');
+    $('txAmount').value=''; $('txDate').value=new Date().toISOString().slice(0,10);
+    $('txNote').value=''; $('btnDeleteTx').style.display='none';
+  }
+}
+function closeSheet(){ $('txOverlay').classList.remove('open'); }
+
+$('btnSaveTx').onclick = async ()=>{
+  const amount = parseFloat($('txAmount').value);
+  if(!amount || amount<=0){ toast('Δώσε έγκυρο ποσό'); return; }
+  const {data:{user}} = await sb.auth.getUser();
+  const payload = {
+    user_id:user.id, kind:state.txKind, scope:state.txScope, amount,
+    currency:state.profile.currency||'EUR',
+    category_id:$('txCategory').value||null,
+    payment_method_id:$('txPayment').value||null,
+    occurred_on:$('txDate').value, note:$('txNote').value||null
+  };
+  const id=$('txId').value;
+  const {error} = id
+    ? await sb.from('transactions').update(payload).eq('id',id)
+    : await sb.from('transactions').insert(payload);
+  if(error){ toast('Σφάλμα αποθήκευσης'); return; }
+  closeSheet(); await loadTransactions(); renderAll(); toast('Αποθηκεύτηκε');
+};
+$('btnDeleteTx').onclick = async ()=>{
+  const id=$('txId').value; if(!id) return;
+  await sb.from('transactions').delete().eq('id',id);
+  closeSheet(); await loadTransactions(); renderAll(); toast('Διαγράφηκε');
+};
+$('kindIncome').onclick=()=>setTxKind('income');
+$('kindExpense').onclick=()=>setTxKind('expense');
+$('scopeBusiness').onclick=()=>setTxScope('business');
+$('scopePersonal').onclick=()=>setTxScope('personal');
+$('btnCloseSheet').onclick=closeSheet;
+$('fab').onclick=()=>openSheet();
+
+/* ====================== SETTINGS actions ====================== */
+$('btnSaveProfile').onclick = async ()=>{
+  const {data:{user}} = await sb.auth.getUser();
+  const {error} = await sb.from('profiles').update({
+    business_name:$('setBusiness').value||null,
+    currency:$('setCurrency').value
+  }).eq('id',user.id);
+  if(error){ toast('Σφάλμα'); return; }
+  await loadProfile(); renderAll(); toast('Αποθηκεύτηκε');
+};
+$('catKindIncome').onclick=()=>{ state.catKind='income'; $('catKindIncome').className='on-income'; $('catKindExpense').className=''; renderSettings(); };
+$('catKindExpense').onclick=()=>{ state.catKind='expense'; $('catKindExpense').className='on-expense'; $('catKindIncome').className=''; renderSettings(); };
+$('catScopeBusiness').onclick=()=>{ state.catScope='business'; $('catScopeBusiness').className='on-scope'; $('catScopePersonal').className=''; renderSettings(); };
+$('catScopePersonal').onclick=()=>{ state.catScope='personal'; $('catScopePersonal').className='on-scope'; $('catScopeBusiness').className=''; renderSettings(); };
+$('btnAddCat').onclick = async ()=>{
+  const name=$('newCatName').value.trim(); if(!name) return;
+  const {data:{user}} = await sb.auth.getUser();
+  const palette=['#16745a','#c0492f','#c79a3a','#0891b2','#9333ea','#db2777','#65a30d'];
+  const {error}=await sb.from('categories').insert({
+    user_id:user.id,name,kind:state.catKind,scope:state.catScope,
+    color:palette[state.categories.length%palette.length]
+  });
+  if(error){ toast('Υπάρχει ήδη'); return; }
+  $('newCatName').value=''; await loadCategories(); renderSettings(); fillSelects(); toast('Προστέθηκε');
+};
+async function deleteCategory(id){ await sb.from('categories').delete().eq('id',id); await loadCategories(); renderSettings(); renderAll(); }
+$('btnAddPm').onclick = async ()=>{
+  const name=$('newPmName').value.trim(); if(!name) return;
+  const {data:{user}} = await sb.auth.getUser();
+  const {error}=await sb.from('payment_methods').insert({user_id:user.id,name});
+  if(error){ toast('Υπάρχει ήδη'); return; }
+  $('newPmName').value=''; await loadPayments(); renderSettings(); toast('Προστέθηκε');
+};
+async function deletePayment(id){ await sb.from('payment_methods').delete().eq('id',id); await loadPayments(); renderSettings(); }
+
+/* ====================== NAVIGATION ====================== */
+document.querySelectorAll('nav.tabbar button').forEach(b=> b.onclick=()=>{
+  document.querySelectorAll('nav.tabbar button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  $('view-'+b.dataset.view).classList.add('active');
+  window.scrollTo(0,0);
+});
+document.querySelectorAll('.scope-toggle button').forEach(b=> b.onclick=()=>{
+  document.querySelectorAll('.scope-toggle button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); state.scope=b.dataset.scope; renderAll();
+});
+$('periodTabs').querySelectorAll('button').forEach(b=> b.onclick=()=>{
+  $('periodTabs').querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); state.period=b.dataset.period; renderHome();
+});
+$('reportTabs').querySelectorAll('button').forEach(b=> b.onclick=()=>{
+  $('reportTabs').querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); state.reportPeriod=b.dataset.period; renderReports();
+});
+
+/* ====================== START ====================== */
+sb.auth.onAuthStateChange((_e,session)=>{ if(!session){ $('authScreen').classList.remove('hidden'); $('app').classList.add('hidden'); }});
+refreshSession();
+</script>
+</body>
+</html>
